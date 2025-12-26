@@ -1,0 +1,7 @@
+{
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "name": "Neon Strike VR",
+  "description": "High-octane VR Cyberpunk Shooter optimized for Meta Quest 3."
+}

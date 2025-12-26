@@ -1,0 +1,91 @@
+
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Strike VR</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Orbitron', sans-serif;
+            overflow: hidden;
+        }
+        #ui-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 10;
+            background: linear-gradient(135deg, rgba(10, 10, 20, 0.9), rgba(20, 10, 30, 0.9));
+            padding: 3rem;
+            border: 3px solid #0ff;
+            border-radius: 20px;
+            box-shadow: 0 0 40px #0ff, inset 0 0 20px #0ff;
+            max-width: 500px;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 0 10px #0ff;
+            letter-spacing: 5px;
+        }
+        p {
+            font-size: 1.1rem;
+            color: #00e5ff;
+            margin-bottom: 2rem;
+        }
+        button {
+            background: #0ff;
+            color: #000;
+            border: none;
+            padding: 1.2rem 2.5rem;
+            font-size: 1.4rem;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 50px;
+            text-transform: uppercase;
+            transition: all 0.3s;
+            box-shadow: 0 0 15px #0ff;
+        }
+        button:hover {
+            transform: scale(1.1);
+            background: #f0f;
+            box-shadow: 0 0 25px #f0f;
+            color: #fff;
+        }
+        #score-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 1.5rem;
+            color: #0ff;
+            text-shadow: 0 0 5px #0ff;
+            z-index: 5;
+            display: none;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://esm.sh/three@^0.182.0",
+    "three/": "https://esm.sh/three@^0.182.0/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0"
+  }
+}
+</script>
+</head>
+<body>
+    <div id="score-panel">SCORE: <span id="score-val">0</span></div>
+    <div id="ui-overlay">
+        <h1>NEON STRIKE</h1>
+        <p>Ameaça detectada no setor Alpha. Use seus blasters para eliminar os drones invasores.</p>
+        <button id="start-button">INICIAR COMBATE</button>
+    </div>
+    <script type="module" src="index.tsx"></script>
+</body>
+</html>
