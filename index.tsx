@@ -1,7 +1,6 @@
-
 import * as THREE from 'three';
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 // --- Constantes do Jogo ---
 const PROJECTILE_SPEED = 40;
@@ -13,7 +12,8 @@ class NeonStrikeVR {
     private camera: THREE.PerspectiveCamera;
     private renderer: THREE.WebGLRenderer;
     private clock: THREE.Clock;
-    
+    private enemyTemplate: THREE.Group | null = null; // Armazena o modelo carregado
+
     // Objetos de Jogo
     private controllers: THREE.Group[] = [];
     private projectiles: THREE.Mesh[] = [];
@@ -21,9 +21,7 @@ class NeonStrikeVR {
     private score: number = 0;
     private lastSpawnTime: number = 0;
 
-    // IA / Áudio
-    private ai: GoogleGenAI;
-    private audioCtx: AudioContext | null = null;
+
 
     constructor() {
         this.scene = new THREE.Scene();
@@ -40,12 +38,11 @@ class NeonStrikeVR {
         document.body.appendChild(this.renderer.domElement);
 
         this.clock = new THREE.Clock();
-        this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
         this.initEnvironment();
         this.initControllers();
         this.setupVR();
-        
+
         window.addEventListener('resize', () => this.onWindowResize());
     }
 
@@ -65,12 +62,38 @@ class NeonStrikeVR {
         // Barreiras de fundo
         const boxGeo = new THREE.BoxGeometry(2, 10, 2);
         const boxMat = new THREE.MeshPhongMaterial({ color: 0x050505, emissive: 0x00ffff, emissiveIntensity: 0.1 });
-        for(let i = 0; i < 20; i++) {
+        for (let i = 0; i < 20; i++) {
             const pillar = new THREE.Mesh(boxGeo, boxMat);
             const angle = (i / 20) * Math.PI * 2;
             pillar.position.set(Math.cos(angle) * 30, 5, Math.sin(angle) * 30);
             this.scene.add(pillar);
         }
+    }
+
+    private loadAssets() {
+        const loader = new GLTFLoader();
+        // O caminho é relativo à pasta public
+        loader.load('/models/drone.glb', (gltf) => {
+            const model = gltf.scene;
+
+            // Ajuste de escala (modelos importados podem ser gigantes ou minusculos)
+            model.scale.set(5.5, 5.5, 5.5);
+
+            // Opcional: Adicionar material emissivo para brilhar no escuro (estilo Neon)
+            model.traverse((child) => {
+                if ((child as THREE.Mesh).isMesh) {
+                    const mesh = child as THREE.Mesh;
+                    // Preserva a textura original ou força um visual neon
+                    mesh.material = new THREE.MeshPhongMaterial({
+                        color: 0x111111,
+                        emissive: 0xff0000, // Vermelho brilhante
+                        emissiveIntensity: 1
+                    });
+                }
+            });
+
+            this.enemyTemplate = model; // Salva na memória
+        });
     }
 
     private initControllers() {
@@ -87,7 +110,7 @@ class NeonStrikeVR {
 
             // Modelo da Arma (Blaster)
             const blasterGroup = new THREE.Group();
-            
+
             const bodyGeo = new THREE.BoxGeometry(0.05, 0.08, 0.25);
             const bodyMat = new THREE.MeshPhongMaterial({ color: 0x222222, emissive: i === 0 ? 0x00ffff : 0xff00ff });
             const body = new THREE.Mesh(bodyGeo, bodyMat);
@@ -112,7 +135,7 @@ class NeonStrikeVR {
         // Posicionamento preciso baseado no controlador
         const matrix = new THREE.Matrix4();
         matrix.extractRotation(controller.matrixWorld);
-        
+
         const direction = new THREE.Vector3(0, 0, -1).applyMatrix4(matrix);
         const position = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
 
@@ -134,80 +157,34 @@ class NeonStrikeVR {
     }
 
     private spawnEnemy() {
-        const droneGroup = new THREE.Group();
-        
-        // Corpo do Drone
-        const geo = new THREE.OctahedronGeometry(0.4);
-        const mat = new THREE.MeshPhongMaterial({ color: 0x111111, emissive: 0xff0000, emissiveIntensity: 1 });
-        const body = new THREE.Mesh(geo, mat);
-        droneGroup.add(body);
+        if (!this.enemyTemplate) return; // Se o modelo ainda não carregou, aborta
 
-        // Anéis orbitais
-        const ringGeo = new THREE.TorusGeometry(0.5, 0.02, 16, 32);
-        const ring = new THREE.Mesh(ringGeo, mat);
-        droneGroup.add(ring);
+        const droneGroup = this.enemyTemplate.clone(); // Clona o modelo carregado
 
-        // Posição aleatória na borda
+        // Posição aleatória (mantém sua lógica original)
         const angle = Math.random() * Math.PI * 2;
         const dist = 25 + Math.random() * 5;
         droneGroup.position.set(Math.cos(angle) * dist, 1 + Math.random() * 3, Math.sin(angle) * dist);
-        
+
+        // Importante: Manter a lógica de vida/colisão
         droneGroup.userData.health = 1;
+
+        // Adiciona à lista de inimigos e à cena
         this.enemies.push(droneGroup);
         this.scene.add(droneGroup);
     }
 
-    private async speak(text: string) {
-        try {
-            const response = await this.ai.models.generateContent({
-                model: "gemini-2.5-flash-preview-tts",
-                contents: [{ parts: [{ text: `Diga de forma curta e militar: ${text}` }] }],
-                config: {
-                    responseModalities: [Modality.AUDIO],
-                    speechConfig: {
-                        voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
-                    },
-                },
-            });
-
-            const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-            if (base64Audio && this.audioCtx) {
-                const audioData = this.base64ToUint8Array(base64Audio);
-                const buffer = await this.decodeAudioData(audioData, this.audioCtx, 24000, 1);
-                const source = this.audioCtx.createBufferSource();
-                source.buffer = buffer;
-                source.connect(this.audioCtx.destination);
-                source.start();
-            }
-        } catch (e) { console.warn("TTS Error", e); }
-    }
-
-    private base64ToUint8Array(base64: string) {
-        const binary = atob(base64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        return bytes;
-    }
-
-    private async decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: number, numChannels: number): Promise<AudioBuffer> {
-        const dataInt16 = new Int16Array(data.buffer);
-        const frameCount = dataInt16.length / numChannels;
-        const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
-        for (let channel = 0; channel < numChannels; channel++) {
-            const channelData = buffer.getChannelData(channel);
-            for (let i = 0; i < frameCount; i++) channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
-        }
-        return buffer;
+    private speak(text: string) {
+        console.log(`[AUDIO] ${text}`);
     }
 
     private setupVR() {
         document.body.appendChild(VRButton.createButton(this.renderer));
         const btn = document.getElementById('start-button');
-        btn?.addEventListener('click', async () => {
+        btn?.addEventListener('click', () => {
             document.getElementById('ui-overlay')!.style.display = 'none';
             document.getElementById('score-panel')!.style.display = 'block';
-            this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-            await this.speak("Sistemas online. Defenda a arena!");
+            this.speak("Sistemas online. Defenda a arena!");
         });
     }
 
@@ -240,7 +217,7 @@ class NeonStrikeVR {
                 if (p.position.distanceTo(e.position) < 0.6) {
                     this.score += 10;
                     document.getElementById('score-val')!.innerText = this.score.toString();
-                    
+
                     this.scene.remove(e);
                     this.enemies.splice(j, 1);
                     this.scene.remove(p);
@@ -254,11 +231,11 @@ class NeonStrikeVR {
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             const e = this.enemies[i];
             const toPlayer = new THREE.Vector3(0, 1.6, 0).sub(e.position).normalize();
-            
+
             // Movimento levemente senoidal para dificultar o tiro
             const sineOffset = new THREE.Vector3(Math.sin(time * 2), Math.cos(time * 2), 0).multiplyScalar(0.01);
             e.position.add(toPlayer.multiplyScalar(ENEMY_SPEED * delta)).add(sineOffset);
-            
+
             e.rotation.y += delta * 2;
             e.rotation.z += delta;
 
